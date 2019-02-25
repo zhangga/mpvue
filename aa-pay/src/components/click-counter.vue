@@ -59,4 +59,3 @@ export default {
   margin: 3px;
 }
 </style>
-

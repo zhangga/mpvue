@@ -1,8 +1,6 @@
 <template>
   <div class="container" @click="clickHandle">
     <div>
-      <img class="img" :src="imgurl" alt="">
-      <img :src="logourl" alt="">
       <!-- 时间组件 -->
       <i-time class="time" :initTime="initTime" :format="timeFormat">
       </i-time>
@@ -12,6 +10,19 @@
     <div class="textDing">♥▁♥下班：{{dingOff}}</div>
 
     <i-button type="primary" @click="ding">打卡</i-button>
+    <i-button type="primary" @click="wxAuthUser">打开弹窗</i-button>
+    
+    <!-- 使用click-counter组件 -->
+    <click-counter :init-num="10" @clicknum="handleClickNum">
+      <!-- 填坑用 -->
+      <input type="checkbox" />禁用
+    </click-counter>
+    <click-counter :init-num="20" @clicknum="handleClickNum" />
+    <click-counter :init-num="30" @clicknum="handleClickNum" />
+    <div>计数结果: {{count}}</div>
+    <a href="/pages/test/main" class="navlink">进入计数器页面</a>
+
+    <Button type="primary" @click="showConfirm = true">Display dialog box</Button>
 
     <!-- 弹窗授权用户信息 -->
     <i-modal :visible="showAuth" :showOk="false" :showCancel="false">
@@ -38,7 +49,7 @@
       <p>{{dingOff}}</p>
     </i-modal>
     <!-- 弹窗打卡二次确认 -->
-    <i-modal :visible="showDingConfirm" title="确定下班打卡吗？" @ok="getLocations" @cancel="closeModal">
+    <i-modal :visible="showDingConfirm" title="确定下班打卡吗？" @ok="sendDingMsg" @cancel="closeModal">
     </i-modal>
     <i-modal :visible="showDong" :showCancel="false" title="请填写正确的姓名" @ok="closeDong">
     </i-modal>
@@ -62,7 +73,7 @@ export default {
   },
 
   onShow () {
-    this.getConnectedWifi()
+    this.wxLogin()
   },
 
   computed: {
@@ -73,8 +84,6 @@ export default {
 
   data () {
     return {
-      logourl: require('../../../static/assets/logo.png'),
-      imgurl: require('../../../static/assets/img.png'),
       msg: '今天您打卡了吗？',
       showAuth: false,
       showUser: false,
@@ -84,9 +93,6 @@ export default {
       showDong: false,
       name: '',
       num: '',
-      location: '',
-      systemInfo: '',
-      wifiInfo: '',
       dingOn: '',
       dingOff: '',
       initTime: 0,
@@ -100,55 +106,6 @@ export default {
     },
     handleClickNum (data) {
       console.log('>>>>>>', data.num)
-    },
-    // 获取连接WIFI
-    getConnectedWifi () {
-      let _this = this
-      wx.startWifi({
-        success (res) {
-          wx.getConnectedWifi({
-            success (res) {
-              console.log(res.wifi)
-              _this.wifiInfo = res.wifi
-              _this.login()
-            },
-            fail (err) {
-              console.log('getConnectedWifi失败', err)
-              wx.getNetworkType({
-                success (res) {
-                  if (res.networkType === 'wifi') {
-                    _this.wifiInfo = {
-                      'SSID': 'kwai-staff',
-                      'BSSID': 'a0:93:51:a9:62'
-                    }
-                    _this.login()
-                  } else {
-                    $Message({
-                      content: '请连接公司wifi',
-                      type: 'error'
-                    })
-                    _this.sendHiMsg()
-                  }
-                },
-                fail (err) {
-                  console.log('getNetworkType失败', err)
-                  $Message({
-                    content: '请连接管理员1',
-                    type: 'error'
-                  })
-                }
-              })
-            }
-          })
-        },
-        fail (err) {
-          console.log('startWifi失败', err)
-          $Message({
-            content: '请连接管理员',
-            type: 'error'
-          })
-        }
-      })
     },
     // 获取当前位置
     getLocations () {
@@ -191,29 +148,26 @@ export default {
           let latitude, longitude
           latitude = res.latitude.toString()
           longitude = res.longitude.toString()
-          _this.location = latitude + ',' + longitude
-          _this.systemInfo = wx.getSystemInfoSync()
-          _this.sendDingMsg()
-          // let msg = {
-          //   cmd: '0',
-          //   name: '张泽强'
-          // }
-          // console.log('经纬：', latitude, longitude)
-          // wx.request({
-          //   header: {
-          //     'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
-          //   },
-          //   url: 'https://myyiba.com:10009',
-          //   method: 'POST',
-          //   data: msg,
-          //   success: function (res) {
-          //     console.log('接收结果：', res.data.ret)
-          //     _this.msg = '打卡成功'
-          //   },
-          //   fail: function (err) {
-          //     console.log(err)
-          //   }
-          // })
+          let msg = {
+            cmd: '0',
+            name: '张泽强'
+          }
+          console.log('经纬：', latitude, longitude)
+          wx.request({
+            header: {
+              'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
+            },
+            url: 'https://myyiba.com:10009',
+            method: 'POST',
+            data: msg,
+            success: function (res) {
+              console.log('接收结果：', res.data.ret)
+              _this.msg = '打卡成功'
+            },
+            fail: function (err) {
+              console.log(err)
+            }
+          })
         },
         fail: function (err) {
           console.log(err)
@@ -221,92 +175,63 @@ export default {
         }
       })
     },
-    // 登陆服务器
-    login () {
+    // 微信登录获取code
+    wxLogin () {
       let _this = this
-      // 有openid直接登陆
-      if (GlobalStore.state.openid && GlobalStore.state.openid.length > 0) {
-        _this.sendHiMsg()
-      } else {
-        // 先登陆微信
-        wx.login({
-          success: function (res) {
-            console.log('wxlogin code: ' + res.code)
-            _this.getOpenId(res.code)
-          }
-        })
-      }
-    },
-    // 游戏hi
-    sendHiMsg () {
-      let _this = this
-      // 向服务器请求欢迎信息
-      let hiMsg = {
-        cmd: '0',
-        openid: GlobalStore.state.openid
-      }
-      wx.request({
-        header: {
-          'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
-        },
-        url: 'https://myyiba.com:10009',
-        method: 'POST',
-        data: hiMsg,
+      let APPID = 'wxbd8f4a305320e623'
+      let SECRET = 'd9e3dfa81feff9833c5ff7536cb0e1b0'
+      wx.login({
         success: function (res) {
-          let ret = res.data.ret
-          console.log('接收结果：', res.data.ret)
-          if (ret === 1) {
-            GlobalStore.state.name = res.data.name
-            GlobalStore.state.num = res.data.num
-            _this.name = res.data.name
-            _this.num = res.data.num
-            _this.dingOn = res.data.dingOn
-            _this.dingOff = res.data.dingOff
-            if (_this.initTime === 0) {
-              _this.initTime = res.data.time
-            }
-            $Message({
-              content: '你好，' + GlobalStore.state.name,
-              type: 'success'
-            })
-          } else {
-            // 完善个人信息
-            _this.showUser = true
-          }
-        }
-      })
-    },
-    // 获取openid
-    getOpenId (code) {
-      let _this = this
-      if (!GlobalStore.state.openid || GlobalStore.state.openid.length === 0) {
-        let idMsg = {
-          cmd: '3',
-          code: code
-        }
-        // 获取openid
-        wx.request({
-          header: {
-            'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
-          },
-          url: 'https://myyiba.com:10009',
-          method: 'POST',
-          data: idMsg,
-          success: function (res) {
-            let ret = res.data.ret
-            console.log('接收结果：', res.data.ret)
-            if (ret === 1) {
+          console.log('wxlogin code: ' + res.code)
+          // 获取openid
+          wx.request({
+            url: 'https://api.weixin.qq.com/sns/jscode2session?appid=' + APPID + '&secret=' + SECRET + '&js_code=' + res.code + '&grant_type=authorization_code',
+            method: 'GET',
+            data: {},
+            header: { 'content-type': 'application/json' },
+            success: function (res) {
+              console.log('wxlogin openid: ' + res.data.openid)
+              // 设置openid
               GlobalStore.state.openid = res.data.openid
-              _this.sendHiMsg()
-            } else {
-              $Message({
-                content: '登录验证失败',
-                type: 'error'
+              // 向服务器请求欢迎信息
+              let hiMsg = {
+                cmd: '0',
+                openid: GlobalStore.state.openid
+              }
+              wx.request({
+                header: {
+                  'Content-Type': 'application/x-www-form-urlencoded;charset=utf-8'
+                },
+                url: 'https://myyiba.com:10009',
+                method: 'POST',
+                data: hiMsg,
+                success: function (res) {
+                  let ret = res.data.ret
+                  console.log('接收结果：', res.data.ret)
+                  if (ret === 1) {
+                    GlobalStore.state.name = res.data.name
+                    GlobalStore.state.num = res.data.num
+                    _this.name = res.data.name
+                    _this.num = res.data.num
+                    _this.dingOn = res.data.dingOn
+                    _this.dingOff = res.data.dingOff
+                    if (_this.initTime === 0) {
+                      _this.initTime = res.data.time
+                    }
+                    $Message({
+                      content: '你好，' + GlobalStore.state.name,
+                      type: 'success'
+                    })
+                  } else {
+                    // 完善个人信息
+                    _this.showUser = true
+                  }
+                }
               })
             }
-          }
-        })
-      }
+          })
+        }
+      })
     },
     // 获取微信用户信息
     wxGetUserInfo (e) {
@@ -339,11 +264,8 @@ export default {
     ding () {
       const openid = GlobalStore.state.openid
       // 登录超时，重新登录
-      if (!openid || openid.length === 0 || !this.wifiInfo || this.wifiInfo.length === 0) {
-        $Message({
-          content: '登录超时，请连接公司wifi重新打开该页面！',
-          type: 'error'
-        })
+      if (!openid || openid.length === 0) {
+        this.$Message.error('登录超时，请重新打开该页面！')
         return
       }
       // 下班二次确认
@@ -351,7 +273,7 @@ export default {
         this.showDingConfirm = true
       } else if (this.dingOn.length === 0) {
         // 上班
-        this.getLocations()
+        this.sendDingMsg()
       }
     },
     // 打卡消息发送
@@ -359,10 +281,7 @@ export default {
       let _this = this
       let dingMsg = {
         cmd: '1',
-        openid: GlobalStore.state.openid,
-        location: this.location,
-        systemInfo: JSON.stringify(this.systemInfo),
-        wifiInfo: JSON.stringify(this.wifiInfo)
+        openid: GlobalStore.state.openid
       }
       this.showDingConfirm = false
       wx.request({
@@ -376,38 +295,12 @@ export default {
           let ret = res.data.ret
           console.log('接收结果：', ret)
           if (ret === -1) {
-            $Message({
-              content: '登录超时，请重新打开该页面！',
-              type: 'error'
-            })
+            _this.$Message.error('登录超时，请重新打开该页面！')
             return
           }
           if (ret === -2) {
-            $Message({
-              content: '个人信息不完善，请重新打开该页面！',
-              type: 'error'
-            })
+            _this.$Message.error('个人信息不完善，请重新打开该页面！')
             return
-          }
-          if (ret === -3) {
-            $Message({
-              content: '请在公司附近打卡',
-              type: 'error'
-            })
-            return
-          }
-          if (ret === -5) {
-            $Message({
-              content: '请连接公司WIFI',
-              type: 'error'
-            })
-            return
-          }
-          if (res.data.sys) {
-            $Message({
-              content: '同上次打卡设备不一致',
-              type: 'warn'
-            })
           }
           let dingType = res.data.dingType
           if (dingType === 1) {
@@ -443,7 +336,7 @@ export default {
           if (ret === 1) {
             GlobalStore.state.name = res.data.name
             GlobalStore.state.num = res.data.num
-            _this.login()
+            _this.wxLogin()
             $Message({
               content: '个人信息更新成功',
               type: 'success'
@@ -523,11 +416,6 @@ export default {
   color: rgb(119, 0, 255);
   padding: 10px;
   text-align: center;
-}
-.img {
-  left: 0px;
-  right: 0px;
-  height: 20px;
 }
 .navlink {
   text-decoration: underline;

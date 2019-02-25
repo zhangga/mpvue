@@ -1,5 +1,9 @@
 {
   "usingComponents": {
-    "i-button": "../../../static/iview/button/index"
+    "i-modal": "../../../static/iview/modal/index",
+    "i-button": "../../../static/iview/button/index",
+    "i-input": "../../../static/iview/input/index",
+    "i-message": "../../../static/iview/message/index",
+    "i-time": "../../../static/iview/time/index"
   }
 }
